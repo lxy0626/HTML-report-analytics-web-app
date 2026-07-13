@@ -17,16 +17,20 @@ export async function getReport(id: string): Promise<Report> {
   return data as Report
 }
 
-/** The chronologically previous report (by uploaded_at), if any — used for the "vs. previous
- *  run" script diff on the detail page. */
+/** The chronologically previous report for the SAME EA (by uploaded_at), if any — used for the
+ *  "vs. previous run" script diff on the detail page. Scoped to ea_name so interleaved uploads
+ *  of different EAs don't get diffed against each other. */
 export async function getPreviousReport(report: Report): Promise<Report | null> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('reports')
     .select('*')
     .lt('uploaded_at', report.uploaded_at)
     .order('uploaded_at', { ascending: false })
     .limit(1)
-    .maybeSingle()
+
+  query = report.ea_name === null ? query.is('ea_name', null) : query.eq('ea_name', report.ea_name)
+
+  const { data, error } = await query.maybeSingle()
   if (error) throw error
   return (data as Report | null) ?? null
 }

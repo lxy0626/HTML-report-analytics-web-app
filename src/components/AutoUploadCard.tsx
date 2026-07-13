@@ -1,127 +1,45 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  clearSavedHandle,
   getLastUploadedMtime,
-  hasReadPermission,
   isFileSystemAccessSupported,
-  loadSavedHandle,
   pickReportFile,
   pickScriptFile,
-  requestReadPermission,
   setLastUploadedMtime,
 } from '../lib/fileWatcher'
 import { parseReport, ReportParseError } from '../lib/parseReport'
 import { saveReport } from '../lib/reportsApi'
+import { useFileHandle } from '../lib/useFileHandle'
 
 const POLL_MS = 3000
 
-type Status = 'checking' | 'unsupported' | 'no-handle' | 'needs-permission' | 'idle' | 'watching'
-type ScriptStatus = 'none' | 'no-handle' | 'needs-permission' | 'ready'
-
 export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
-  const [status, setStatus] = useState<Status>('checking')
-  const [handle, setHandle] = useState<FileSystemFileHandle | null>(null)
+  const supported = isFileSystemAccessSupported()
+  const report = useFileHandle('report', pickReportFile)
+  const script = useFileHandle('script', pickScriptFile)
+
+  const [watching, setWatching] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
-  const lastMtimeRef = useRef<number | null>(null)
+  const lastMtimeRef = useRef<number | null>(getLastUploadedMtime())
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const [scriptStatus, setScriptStatus] = useState<ScriptStatus>('none')
-  const [scriptHandle, setScriptHandleState] = useState<FileSystemFileHandle | null>(null)
-  const scriptHandleRef = useRef<FileSystemFileHandle | null>(null)
-
-  function setScriptHandle(h: FileSystemFileHandle | null) {
-    scriptHandleRef.current = h
-    setScriptHandleState(h)
-  }
-
-  useEffect(() => {
-    if (!isFileSystemAccessSupported()) {
-      setStatus('unsupported')
-      return
-    }
-    lastMtimeRef.current = getLastUploadedMtime()
-    loadSavedHandle('report')
-      .then(async (saved) => {
-        if (!saved) {
-          setStatus('no-handle')
-          return
-        }
-        setHandle(saved)
-        setStatus((await hasReadPermission(saved)) ? 'idle' : 'needs-permission')
-      })
-      .catch(() => setStatus('no-handle'))
-
-    loadSavedHandle('script')
-      .then(async (saved) => {
-        if (!saved) {
-          setScriptStatus('no-handle')
-          return
-        }
-        setScriptHandle(saved)
-        setScriptStatus((await hasReadPermission(saved)) ? 'ready' : 'needs-permission')
-      })
-      .catch(() => setScriptStatus('no-handle'))
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [])
 
   function stopWatching() {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
+    setWatching(false)
   }
 
-  async function handleChoose() {
-    try {
-      const picked = await pickReportFile()
-      setHandle(picked)
-      setStatus('idle')
-      setMessage(null)
-    } catch {
-      // user cancelled the file picker
-    }
-  }
-
-  async function handleGrant() {
-    if (!handle) return
-    setStatus((await requestReadPermission(handle)) ? 'idle' : 'needs-permission')
-  }
-
-  async function handleForget() {
+  async function handleForgetReport() {
     stopWatching()
-    await clearSavedHandle('report')
-    setHandle(null)
+    await report.forget()
     setMessage(null)
-    setStatus('no-handle')
-  }
-
-  async function handleChooseScript() {
-    try {
-      const picked = await pickScriptFile()
-      setScriptHandle(picked)
-      setScriptStatus('ready')
-    } catch {
-      // user cancelled the file picker
-    }
-  }
-
-  async function handleGrantScript() {
-    if (!scriptHandle) return
-    setScriptStatus((await requestReadPermission(scriptHandle)) ? 'ready' : 'needs-permission')
-  }
-
-  async function handleForgetScript() {
-    await clearSavedHandle('script')
-    setScriptHandle(null)
-    setScriptStatus('no-handle')
   }
 
   async function checkOnce() {
+    const handle = report.handleRef.current
     if (!handle) return
     try {
       const file = await handle.getFile()
@@ -136,9 +54,9 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
       setLastUploadedMtime(file.lastModified)
 
       let scriptSource: string | null = null
-      if (scriptHandleRef.current) {
+      if (script.handleRef.current) {
         try {
-          scriptSource = await (await scriptHandleRef.current.getFile()).text()
+          scriptSource = await (await script.handleRef.current.getFile()).text()
         } catch {
           // script read failed (e.g. permission revoked) — still upload the report without it
         }
@@ -162,14 +80,26 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
   }
 
   function handleStart() {
-    setStatus('watching')
+    setWatching(true)
     void checkOnce()
     intervalRef.current = setInterval(() => void checkOnce(), POLL_MS)
   }
 
-  function handleStop() {
-    stopWatching()
-    setStatus('idle')
+  if (!supported) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Auto-upload
+        </p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Your browser doesn't support watching local files (this needs Chrome or Edge). Use the{' '}
+          <Link to="/upload" className="text-indigo-600 underline dark:text-indigo-400">
+            Upload
+          </Link>{' '}
+          page instead.
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -178,26 +108,16 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
         Auto-upload
       </p>
 
-      {status === 'checking' && <p className="text-sm text-slate-400">Checking browser support…</p>}
+      {report.status === 'loading' && <p className="text-sm text-slate-400">Loading…</p>}
 
-      {status === 'unsupported' && (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Your browser doesn't support watching local files (this needs Chrome or Edge). Use the{' '}
-          <Link to="/upload" className="text-indigo-600 underline dark:text-indigo-400">
-            Upload
-          </Link>{' '}
-          page instead.
-        </p>
-      )}
-
-      {status === 'no-handle' && (
+      {report.status === 'no-handle' && (
         <div>
           <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">
             Pick your <code>StrategyTester.htm</code> once, and this page will watch it for changes and
             upload automatically while this tab is open.
           </p>
           <button
-            onClick={() => void handleChoose()}
+            onClick={() => void report.choose()}
             className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
           >
             Choose report file
@@ -205,21 +125,21 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
         </div>
       )}
 
-      {status === 'needs-permission' && (
+      {report.status === 'needs-permission' && (
         <div>
           <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">
-            Previously selected <span className="font-medium">{handle?.name}</span>. Re-grant access to
-            resume watching it.
+            Previously selected <span className="font-medium">{report.handle?.name}</span>. Re-grant access
+            to resume watching it.
           </p>
           <div className="flex gap-2">
             <button
-              onClick={() => void handleGrant()}
+              onClick={() => void report.grant()}
               className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
             >
               Grant access
             </button>
             <button
-              onClick={() => void handleForget()}
+              onClick={() => void handleForgetReport()}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
             >
               Choose a different file
@@ -228,14 +148,14 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
         </div>
       )}
 
-      {(status === 'idle' || status === 'watching') && (
+      {report.status === 'ready' && (
         <div>
           <p className="mb-2 text-sm">
             <span className="text-slate-500 dark:text-slate-400">File: </span>
-            <span className="font-medium">{handle?.name}</span>
+            <span className="font-medium">{report.handle?.name}</span>
           </p>
           <div className="mb-2 flex gap-2">
-            {status === 'idle' ? (
+            {!watching ? (
               <button
                 onClick={handleStart}
                 className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
@@ -244,20 +164,20 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
               </button>
             ) : (
               <button
-                onClick={handleStop}
+                onClick={stopWatching}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
               >
                 Stop watching
               </button>
             )}
             <button
-              onClick={() => void handleForget()}
+              onClick={() => void handleForgetReport()}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
             >
               Forget file
             </button>
           </div>
-          {status === 'watching' && (
+          {watching && (
             <p className="text-xs text-slate-400">
               Watching — checked {lastChecked ? lastChecked.toLocaleTimeString() : 'never yet'}. Leave this
               tab open while you test; closing it stops watching.
@@ -268,45 +188,43 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
 
       {message && <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">{message}</p>}
 
-      {status !== 'unsupported' && status !== 'checking' && (
-        <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">
-            EA script <span className="text-slate-400 dark:text-slate-500">(optional — enables script diffing between runs)</span>
-          </p>
-          {scriptStatus === 'no-handle' && (
+      <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">
+          EA script <span className="text-slate-400 dark:text-slate-500">(optional — enables script diffing between runs)</span>
+        </p>
+        {script.status === 'no-handle' && (
+          <button
+            onClick={() => void script.choose()}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            Attach .mq4 / .mq5
+          </button>
+        )}
+        {script.status === 'needs-permission' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 dark:text-slate-400">{script.handle?.name}</span>
             <button
-              onClick={() => void handleChooseScript()}
+              onClick={() => void script.grant()}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
             >
-              Attach .mq4 / .mq5
+              Re-grant access
             </button>
-          )}
-          {scriptStatus === 'needs-permission' && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{scriptHandle?.name}</span>
-              <button
-                onClick={() => void handleGrantScript()}
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-              >
-                Re-grant access
-              </button>
-            </div>
-          )}
-          {scriptStatus === 'ready' && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                Attached: <span className="font-medium">{scriptHandle?.name}</span>
-              </span>
-              <button
-                onClick={() => void handleForgetScript()}
-                className="text-xs text-slate-400 hover:text-red-600 dark:hover:text-red-400"
-              >
-                Remove
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+        {script.status === 'ready' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Attached: <span className="font-medium">{script.handle?.name}</span>
+            </span>
+            <button
+              onClick={() => void script.forget()}
+              className="text-xs text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -18,7 +18,7 @@ export interface ExplainDiffInput {
 
 /** Calls the explain-diff Edge Function (see supabase/functions/explain-diff) for a plausible
  *  plain-English explanation of what changed and why performance moved. Requires the function to
- *  be deployed and ANTHROPIC_API_KEY to be set as a Supabase secret. */
+ *  be deployed and NIM_API_KEY to be set as a Supabase secret. */
 export async function requestDiffSummary(input: ExplainDiffInput): Promise<string> {
   const { data, error } = await supabase.functions.invoke<{ summary?: string; error?: string }>(
     'explain-diff',

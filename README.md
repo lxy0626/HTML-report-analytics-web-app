@@ -99,14 +99,18 @@ Edge) support — Firefox and Safari will see a message pointing to the regular 
 Both upload paths (Upload page and Auto-upload) let you optionally attach the EA's `.mq4`/`.mq5`
 source alongside a report. Once two consecutive reports both have a script snapshot, the Report
 Detail page (vs. the previous run) and the Compare page (when exactly 2 reports are selected) show
-a git-style diff between the two versions, plus an **Ask AI to explain this** button that asks
-Claude for a plausible explanation of which code change likely caused the metric change — this is
-a plausible narrative from one before/after pair, not a verified causal claim.
+a git-style diff between the two versions, plus an **Ask AI to explain this** button that asks an
+LLM for a plausible explanation of which code change likely caused the metric change — this is a
+plausible narrative from one before/after pair, not a verified causal claim.
 
-This needs its own one-time setup, separate from the rest of the app, since it calls an external
-AI API and that API key has to live somewhere other than the browser bundle:
+The summary is generated via **NVIDIA NIM** (build.nvidia.com) — a free, OpenAI-compatible API
+catalog with generous rate limits and no cost, serving open models including Chinese-developed
+ones (defaults to Qwen2.5-7B-Instruct). This needs its own one-time setup, separate from the rest
+of the app, since it calls an external API and that key has to live somewhere other than the
+browser bundle:
 
-1. Get an API key from [console.anthropic.com](https://console.anthropic.com).
+1. Get a free API key from [build.nvidia.com](https://build.nvidia.com) (any NIM model page has an
+   "Get API Key" button).
 2. Link the Supabase CLI to your project (no global install needed — `npx` downloads it on demand):
    ```bash
    npx supabase login
@@ -115,7 +119,12 @@ AI API and that API key has to live somewhere other than the browser bundle:
 3. Set the key as a function secret (run this yourself — never paste API keys in chat with an
    assistant helping you build this):
    ```bash
-   npx supabase secrets set ANTHROPIC_API_KEY=sk-...
+   npx supabase secrets set NIM_API_KEY=nvapi-...
+   ```
+   Optionally override the model (e.g. if the default below is ever retired from the free
+   catalog) without redeploying:
+   ```bash
+   npx supabase secrets set NIM_MODEL=qwen/qwen2.5-7b-instruct
    ```
 4. Deploy the function:
    ```bash
@@ -128,7 +137,7 @@ AI API and that API key has to live somewhere other than the browser bundle:
 The Edge Function (`supabase/functions/explain-diff`) only ever receives a text diff and metric
 deltas, never full source in the clear beyond that diff, and requires a valid Supabase login
 session to call (default JWT verification) — it never touches your database directly and holds no
-credential beyond the Anthropic key.
+credential beyond the NVIDIA NIM key.
 
 ## Notes on the parser
 
@@ -151,5 +160,5 @@ always kept in Storage regardless.
   Vite's dev-server HMR, which relies on inline/eval'd scripts).
 - `.env` is git-ignored; only the public anon key is ever used client-side.
 - The optional `explain-diff` Edge Function holds the only other secret in this project (the
-  Anthropic API key), set via `supabase secrets set` — never committed, never in the client bundle
-  — and requires a valid Supabase session to invoke.
+  NVIDIA NIM API key), set via `supabase secrets set` — never committed, never in the client
+  bundle — and requires a valid Supabase session to invoke.

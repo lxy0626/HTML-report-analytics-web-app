@@ -56,8 +56,10 @@ export function ScriptDiffSection({ before, after, persistTo }: ScriptDiffSectio
         before: metricsOf(before),
         after: metricsOf(after),
       })
-      setSummary(result)
+      // Persist before showing success, so the UI never displays a summary that then turns out
+      // not to have been saved (a failed save surfaces as an error instead of a silent mismatch).
       if (persistTo) await saveAiSummary(persistTo, result)
+      setSummary(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate summary.')
     } finally {

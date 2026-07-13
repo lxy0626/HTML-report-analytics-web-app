@@ -209,7 +209,13 @@ export function ComparePage() {
             </div>
           )}
 
-          {selected.length === 2 && <ScriptDiffSection before={selected[0]} after={selected[1]} />}
+          {selected.length === 2 && (
+            <ScriptDiffSection
+              key={`${selected[0].id}-${selected[1].id}`}
+              before={selected[0]}
+              after={selected[1]}
+            />
+          )}
         </>
       )}
     </div>

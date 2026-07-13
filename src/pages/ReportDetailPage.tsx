@@ -51,12 +51,26 @@ export function ReportDetailPage() {
 
   useEffect(() => {
     if (!id) return
+    let cancelled = false
+    setReport(null)
+    setPreviousReport(null)
+    setError(null)
+    setOriginalUrl(null)
+
     getReport(id)
       .then(async (r) => {
+        if (cancelled) return
         setReport(r)
-        setPreviousReport(await getPreviousReport(r))
+        const previous = await getPreviousReport(r)
+        if (!cancelled) setPreviousReport(previous)
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load report.'))
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load report.')
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
   async function handleViewOriginal() {
@@ -176,7 +190,9 @@ export function ReportDetailPage() {
         <EquityCurveChart trades={report.trades} />
       </div>
 
-      {previousReport && <ScriptDiffSection before={previousReport} after={report} persistTo={report.id} />}
+      {previousReport && (
+        <ScriptDiffSection key={report.id} before={previousReport} after={report} persistTo={report.id} />
+      )}
 
       {parameterEntries.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
