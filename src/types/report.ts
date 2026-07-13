@@ -124,4 +124,8 @@ export interface Report {
   avg_consecutive_losses: number | null
 
   trades: Trade[]
+
+  script_source: string | null
+  ai_summary: string | null
+  ai_summary_generated_at: string | null
 }

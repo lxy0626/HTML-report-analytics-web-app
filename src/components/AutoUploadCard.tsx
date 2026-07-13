@@ -7,6 +7,7 @@ import {
   isFileSystemAccessSupported,
   loadSavedHandle,
   pickReportFile,
+  pickScriptFile,
   requestReadPermission,
   setLastUploadedMtime,
 } from '../lib/fileWatcher'
@@ -16,6 +17,7 @@ import { saveReport } from '../lib/reportsApi'
 const POLL_MS = 3000
 
 type Status = 'checking' | 'unsupported' | 'no-handle' | 'needs-permission' | 'idle' | 'watching'
+type ScriptStatus = 'none' | 'no-handle' | 'needs-permission' | 'ready'
 
 export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
   const [status, setStatus] = useState<Status>('checking')
@@ -25,13 +27,22 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
   const lastMtimeRef = useRef<number | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const [scriptStatus, setScriptStatus] = useState<ScriptStatus>('none')
+  const [scriptHandle, setScriptHandleState] = useState<FileSystemFileHandle | null>(null)
+  const scriptHandleRef = useRef<FileSystemFileHandle | null>(null)
+
+  function setScriptHandle(h: FileSystemFileHandle | null) {
+    scriptHandleRef.current = h
+    setScriptHandleState(h)
+  }
+
   useEffect(() => {
     if (!isFileSystemAccessSupported()) {
       setStatus('unsupported')
       return
     }
     lastMtimeRef.current = getLastUploadedMtime()
-    loadSavedHandle()
+    loadSavedHandle('report')
       .then(async (saved) => {
         if (!saved) {
           setStatus('no-handle')
@@ -41,6 +52,17 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
         setStatus((await hasReadPermission(saved)) ? 'idle' : 'needs-permission')
       })
       .catch(() => setStatus('no-handle'))
+
+    loadSavedHandle('script')
+      .then(async (saved) => {
+        if (!saved) {
+          setScriptStatus('no-handle')
+          return
+        }
+        setScriptHandle(saved)
+        setScriptStatus((await hasReadPermission(saved)) ? 'ready' : 'needs-permission')
+      })
+      .catch(() => setScriptStatus('no-handle'))
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
@@ -72,10 +94,31 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
 
   async function handleForget() {
     stopWatching()
-    await clearSavedHandle()
+    await clearSavedHandle('report')
     setHandle(null)
     setMessage(null)
     setStatus('no-handle')
+  }
+
+  async function handleChooseScript() {
+    try {
+      const picked = await pickScriptFile()
+      setScriptHandle(picked)
+      setScriptStatus('ready')
+    } catch {
+      // user cancelled the file picker
+    }
+  }
+
+  async function handleGrantScript() {
+    if (!scriptHandle) return
+    setScriptStatus((await requestReadPermission(scriptHandle)) ? 'ready' : 'needs-permission')
+  }
+
+  async function handleForgetScript() {
+    await clearSavedHandle('script')
+    setScriptHandle(null)
+    setScriptStatus('no-handle')
   }
 
   async function checkOnce() {
@@ -92,9 +135,24 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
       lastMtimeRef.current = file.lastModified
       setLastUploadedMtime(file.lastModified)
 
-      await saveReport({ file, parsed, tag: null, notes: 'Auto-uploaded from browser watcher' })
+      let scriptSource: string | null = null
+      if (scriptHandleRef.current) {
+        try {
+          scriptSource = await (await scriptHandleRef.current.getFile()).text()
+        } catch {
+          // script read failed (e.g. permission revoked) — still upload the report without it
+        }
+      }
+
+      await saveReport({
+        file,
+        parsed,
+        tag: null,
+        notes: 'Auto-uploaded from browser watcher',
+        scriptSource,
+      })
       setMessage(
-        `Uploaded new report at ${new Date().toLocaleTimeString()} — net profit ${parsed.netProfit ?? '—'}, profit factor ${parsed.profitFactor ?? '—'}`,
+        `Uploaded new report at ${new Date().toLocaleTimeString()} — net profit ${parsed.netProfit ?? '—'}, profit factor ${parsed.profitFactor ?? '—'}${scriptSource ? ' (with script snapshot)' : ''}`,
       )
       onUploaded?.()
     } catch (err) {
@@ -209,6 +267,46 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
       )}
 
       {message && <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">{message}</p>}
+
+      {status !== 'unsupported' && status !== 'checking' && (
+        <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+          <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">
+            EA script <span className="text-slate-400 dark:text-slate-500">(optional — enables script diffing between runs)</span>
+          </p>
+          {scriptStatus === 'no-handle' && (
+            <button
+              onClick={() => void handleChooseScript()}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
+              Attach .mq4 / .mq5
+            </button>
+          )}
+          {scriptStatus === 'needs-permission' && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 dark:text-slate-400">{scriptHandle?.name}</span>
+              <button
+                onClick={() => void handleGrantScript()}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                Re-grant access
+              </button>
+            </div>
+          )}
+          {scriptStatus === 'ready' && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Attached: <span className="font-medium">{scriptHandle?.name}</span>
+              </span>
+              <button
+                onClick={() => void handleForgetScript()}
+                className="text-xs text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+              >
+                Remove
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

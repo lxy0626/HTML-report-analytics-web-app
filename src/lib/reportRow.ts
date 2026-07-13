@@ -8,12 +8,22 @@ export interface BuildReportRowInput {
   tag: string | null
   notes: string | null
   parsed: ParsedReport
+  scriptSource: string | null
 }
 
 /** Maps a ParsedReport into a `reports` table row. Pure — no Supabase client, no
- *  environment access — so both the browser app and the Node upload watcher
- *  (scripts/watchAndUpload.ts) can share the exact same mapping. */
-export function buildReportRow({ id, userId, fileName, storagePath, tag, notes, parsed }: BuildReportRowInput) {
+ *  environment access — so both the upload flow and the in-browser auto-upload
+ *  watcher can share the exact same mapping. */
+export function buildReportRow({
+  id,
+  userId,
+  fileName,
+  storagePath,
+  tag,
+  notes,
+  parsed,
+  scriptSource,
+}: BuildReportRowInput) {
   return {
     id,
     user_id: userId,
@@ -63,5 +73,6 @@ export function buildReportRow({ id, userId, fileName, storagePath, tag, notes, 
     avg_consecutive_wins: parsed.avgConsecutiveWins,
     avg_consecutive_losses: parsed.avgConsecutiveLosses,
     trades: parsed.trades,
+    script_source: scriptSource,
   }
 }

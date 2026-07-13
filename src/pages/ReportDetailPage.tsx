@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EquityCurveChart } from '../components/EquityCurveChart'
+import { ScriptDiffSection } from '../components/ScriptDiffSection'
 import { TradesTable } from '../components/TradesTable'
 import { formatDate, formatMoney, formatNumber, formatPct } from '../lib/format'
-import { deleteReport, getReport, getSignedReportUrl } from '../lib/reportsApi'
+import { deleteReport, getPreviousReport, getReport, getSignedReportUrl } from '../lib/reportsApi'
 import type { Report } from '../types/report'
 
 interface MetricRow {
@@ -44,13 +45,17 @@ export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [report, setReport] = useState<Report | null>(null)
+  const [previousReport, setPreviousReport] = useState<Report | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
     getReport(id)
-      .then(setReport)
+      .then(async (r) => {
+        setReport(r)
+        setPreviousReport(await getPreviousReport(r))
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load report.'))
   }, [id])
 
@@ -170,6 +175,8 @@ export function ReportDetailPage() {
         </p>
         <EquityCurveChart trades={report.trades} />
       </div>
+
+      {previousReport && <ScriptDiffSection before={previousReport} after={report} persistTo={report.id} />}
 
       {parameterEntries.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">

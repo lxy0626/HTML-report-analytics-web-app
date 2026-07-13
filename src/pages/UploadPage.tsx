@@ -9,9 +9,11 @@ import type { ParsedReport } from '../types/report'
 export function UploadPage() {
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const scriptInputRef = useRef<HTMLInputElement>(null)
   const [dragActive, setDragActive] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [parsed, setParsed] = useState<ParsedReport | null>(null)
+  const [scriptFile, setScriptFile] = useState<File | null>(null)
   const [tag, setTag] = useState('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -49,7 +51,14 @@ export function UploadPage() {
     setSaving(true)
     setError(null)
     try {
-      const report = await saveReport({ file, parsed, tag: tag.trim() || null, notes: notes.trim() || null })
+      const scriptSource = scriptFile ? await scriptFile.text() : null
+      const report = await saveReport({
+        file,
+        parsed,
+        tag: tag.trim() || null,
+        notes: notes.trim() || null,
+        scriptSource,
+      })
       navigate(`/reports/${report.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save the report.')
@@ -124,6 +133,31 @@ export function UploadPage() {
               </ul>
             </div>
           )}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              EA script <span className="font-normal text-slate-400">(optional — enables script diffing between runs)</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => scriptInputRef.current?.click()}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                Attach .mq4 / .mq5
+              </button>
+              {scriptFile && (
+                <span className="text-xs text-slate-500 dark:text-slate-400">{scriptFile.name}</span>
+              )}
+              <input
+                ref={scriptInputRef}
+                type="file"
+                accept=".mq4,.mq5"
+                className="hidden"
+                onChange={(e) => setScriptFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+          </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">

@@ -1,6 +1,12 @@
 const DB_NAME = 'mt4-report-tracker'
 const STORE_NAME = 'handles'
-const HANDLE_KEY = 'reportFileHandle'
+
+export type HandleSlot = 'report' | 'script'
+
+const HANDLE_KEYS: Record<HandleSlot, string> = {
+  report: 'reportFileHandle',
+  script: 'scriptFileHandle',
+}
 
 export function isFileSystemAccessSupported(): boolean {
   return typeof window !== 'undefined' && typeof window.showOpenFilePicker === 'function'
@@ -17,32 +23,32 @@ function openDb(): Promise<IDBDatabase> {
   })
 }
 
-/** Persists the file handle across page reloads (IndexedDB can store handles; localStorage can't). */
-export async function saveHandle(handle: FileSystemFileHandle): Promise<void> {
+/** Persists a file handle across page reloads (IndexedDB can store handles; localStorage can't). */
+export async function saveHandle(slot: HandleSlot, handle: FileSystemFileHandle): Promise<void> {
   const db = await openDb()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    tx.objectStore(STORE_NAME).put(handle, HANDLE_KEY)
+    tx.objectStore(STORE_NAME).put(handle, HANDLE_KEYS[slot])
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
 }
 
-export async function loadSavedHandle(): Promise<FileSystemFileHandle | null> {
+export async function loadSavedHandle(slot: HandleSlot): Promise<FileSystemFileHandle | null> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
-    const req = tx.objectStore(STORE_NAME).get(HANDLE_KEY)
+    const req = tx.objectStore(STORE_NAME).get(HANDLE_KEYS[slot])
     req.onsuccess = () => resolve((req.result as FileSystemFileHandle | undefined) ?? null)
     req.onerror = () => reject(req.error)
   })
 }
 
-export async function clearSavedHandle(): Promise<void> {
+export async function clearSavedHandle(slot: HandleSlot): Promise<void> {
   const db = await openDb()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    tx.objectStore(STORE_NAME).delete(HANDLE_KEY)
+    tx.objectStore(STORE_NAME).delete(HANDLE_KEYS[slot])
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
@@ -55,7 +61,18 @@ export async function pickReportFile(): Promise<FileSystemFileHandle> {
     excludeAcceptAllOption: false,
     multiple: false,
   })
-  await saveHandle(handle)
+  await saveHandle('report', handle)
+  return handle
+}
+
+/** Opens the native file picker for the EA source (requires a user gesture) and remembers the choice. */
+export async function pickScriptFile(): Promise<FileSystemFileHandle> {
+  const [handle] = await window.showOpenFilePicker!({
+    types: [{ description: 'MT4/MT5 EA source', accept: { 'text/plain': ['.mq4', '.mq5'] } }],
+    excludeAcceptAllOption: false,
+    multiple: false,
+  })
+  await saveHandle('script', handle)
   return handle
 }
 

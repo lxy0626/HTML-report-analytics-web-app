@@ -94,6 +94,42 @@ Instead of manually uploading `StrategyTester.htm` after every backtest, the Das
 This uses the browser's **File System Access API**, which only Chromium-based browsers (Chrome,
 Edge) support — Firefox and Safari will see a message pointing to the regular Upload page instead.
 
+## Script-diff + AI summary (optional)
+
+Both upload paths (Upload page and Auto-upload) let you optionally attach the EA's `.mq4`/`.mq5`
+source alongside a report. Once two consecutive reports both have a script snapshot, the Report
+Detail page (vs. the previous run) and the Compare page (when exactly 2 reports are selected) show
+a git-style diff between the two versions, plus an **Ask AI to explain this** button that asks
+Claude for a plausible explanation of which code change likely caused the metric change — this is
+a plausible narrative from one before/after pair, not a verified causal claim.
+
+This needs its own one-time setup, separate from the rest of the app, since it calls an external
+AI API and that API key has to live somewhere other than the browser bundle:
+
+1. Get an API key from [console.anthropic.com](https://console.anthropic.com).
+2. Link the Supabase CLI to your project (no global install needed — `npx` downloads it on demand):
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref <your-project-ref>
+   ```
+3. Set the key as a function secret (run this yourself — never paste API keys in chat with an
+   assistant helping you build this):
+   ```bash
+   npx supabase secrets set ANTHROPIC_API_KEY=sk-...
+   ```
+4. Deploy the function:
+   ```bash
+   npx supabase functions deploy explain-diff
+   ```
+5. Re-run [`supabase/schema.sql`](supabase/schema.sql) in the SQL editor — it now also adds
+   `script_source`, `ai_summary`, and `ai_summary_generated_at` columns (idempotent, safe even if
+   you already have the `reports` table).
+
+The Edge Function (`supabase/functions/explain-diff`) only ever receives a text diff and metric
+deltas, never full source in the clear beyond that diff, and requires a valid Supabase login
+session to call (default JWT verification) — it never touches your database directly and holds no
+credential beyond the Anthropic key.
+
 ## Notes on the parser
 
 `src/lib/parseReport.ts` targets the classic **MT4** Strategy Tester HTML report format (a
@@ -114,3 +150,6 @@ always kept in Storage regardless.
 - A strict Content-Security-Policy is injected into the production build only (it would break
   Vite's dev-server HMR, which relies on inline/eval'd scripts).
 - `.env` is git-ignored; only the public anon key is ever used client-side.
+- The optional `explain-diff` Edge Function holds the only other secret in this project (the
+  Anthropic API key), set via `supabase secrets set` — never committed, never in the client bundle
+  — and requires a valid Supabase session to invoke.

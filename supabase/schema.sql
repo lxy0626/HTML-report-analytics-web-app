@@ -62,6 +62,13 @@ create table if not exists public.reports (
   trades                         jsonb not null default '[]'::jsonb
 );
 
+-- Added later for the script-diff + AI summary feature. `alter table ... add column if not
+-- exists` is idempotent, so this is safe to re-run against a database that already has the
+-- base reports table (as well as a brand-new one from the create table above).
+alter table public.reports add column if not exists script_source text;
+alter table public.reports add column if not exists ai_summary text;
+alter table public.reports add column if not exists ai_summary_generated_at timestamptz;
+
 create index if not exists reports_user_id_uploaded_at_idx
   on public.reports (user_id, uploaded_at desc);
 

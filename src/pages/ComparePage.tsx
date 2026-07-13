@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ComparisonBarChart } from '../components/ComparisonBarChart'
+import { ScriptDiffSection } from '../components/ScriptDiffSection'
 import { formatDate, formatMoney, formatPct } from '../lib/format'
 import { listReports } from '../lib/reportsApi'
 import type { Report } from '../types/report'
@@ -207,6 +208,8 @@ export function ComparePage() {
               </table>
             </div>
           )}
+
+          {selected.length === 2 && <ScriptDiffSection before={selected[0]} after={selected[1]} />}
         </>
       )}
     </div>

@@ -17,6 +17,28 @@ export async function getReport(id: string): Promise<Report> {
   return data as Report
 }
 
+/** The chronologically previous report (by uploaded_at), if any — used for the "vs. previous
+ *  run" script diff on the detail page. */
+export async function getPreviousReport(report: Report): Promise<Report | null> {
+  const { data, error } = await supabase
+    .from('reports')
+    .select('*')
+    .lt('uploaded_at', report.uploaded_at)
+    .order('uploaded_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return (data as Report | null) ?? null
+}
+
+export async function saveAiSummary(reportId: string, summary: string): Promise<void> {
+  const { error } = await supabase
+    .from('reports')
+    .update({ ai_summary: summary, ai_summary_generated_at: new Date().toISOString() })
+    .eq('id', reportId)
+  if (error) throw error
+}
+
 export async function deleteReport(report: Report): Promise<void> {
   await supabase.storage.from(REPORTS_BUCKET).remove([report.storage_path])
   const { error } = await supabase.from('reports').delete().eq('id', report.id)
@@ -37,9 +59,10 @@ export interface SaveReportInput {
   parsed: ParsedReport
   tag: string | null
   notes: string | null
+  scriptSource?: string | null
 }
 
-export async function saveReport({ file, parsed, tag, notes }: SaveReportInput): Promise<Report> {
+export async function saveReport({ file, parsed, tag, notes, scriptSource = null }: SaveReportInput): Promise<Report> {
   const {
     data: { user },
     error: userError,
@@ -63,6 +86,7 @@ export async function saveReport({ file, parsed, tag, notes }: SaveReportInput):
     tag,
     notes,
     parsed,
+    scriptSource,
   })
 
   const { data, error } = await supabase.from('reports').insert(row).select().single()
