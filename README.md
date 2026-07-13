@@ -78,6 +78,22 @@ npm run test     # run the parser unit tests
 npm run build    # production build (type-checks, then builds to dist/)
 ```
 
+## Automatic upload from MT4
+
+Instead of manually uploading `StrategyTester.htm` after every backtest, the Dashboard has an
+**Auto-upload** card that watches it for you, right in the browser:
+
+1. Click **Choose report file** and select your `StrategyTester.htm` once (a native file picker —
+   the browser remembers this choice for next time).
+2. Click **Start watching**. While that tab stays open, it polls the file every few seconds; the
+   moment MT4 rewrites it after a new backtest, the report is parsed and uploaded automatically —
+   no separate script, no extra credentials (it reuses your existing logged-in session).
+3. Close the tab (or click **Stop watching**) and it stops — nothing runs in the background
+   otherwise, matching a "only active while I'm testing" workflow.
+
+This uses the browser's **File System Access API**, which only Chromium-based browsers (Chrome,
+Edge) support — Firefox and Safari will see a message pointing to the regular Upload page instead.
+
 ## Notes on the parser
 
 `src/lib/parseReport.ts` targets the classic **MT4** Strategy Tester HTML report format (a

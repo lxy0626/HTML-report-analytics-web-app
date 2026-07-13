@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AutoUploadCard } from '../components/AutoUploadCard'
 import { ReportsTable } from '../components/ReportsTable'
 import { RiskRewardScatter } from '../components/RiskRewardScatter'
 import { StatCard } from '../components/StatCard'
@@ -45,10 +46,14 @@ export function DashboardPage() {
   }
   if (reports.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center dark:border-slate-700 dark:bg-slate-900">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          No reports yet. <Link to="/upload" className="text-indigo-600 underline dark:text-indigo-400">Upload your first Strategy Tester report</Link> to start tracking progress.
-        </p>
+      <div className="space-y-6">
+        <AutoUploadCard onUploaded={() => void refresh()} />
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center dark:border-slate-700 dark:bg-slate-900">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            No reports yet. <Link to="/upload" className="text-indigo-600 underline dark:text-indigo-400">Upload your first Strategy Tester report</Link>{' '}
+            or start the auto-upload watcher above.
+          </p>
+        </div>
       </div>
     )
   }
@@ -73,6 +78,8 @@ export function DashboardPage() {
           Latest run: {latest.tag || latest.ea_name || latest.file_name} · uploaded {formatDate(latest.uploaded_at)}
         </p>
       </div>
+
+      <AutoUploadCard onUploaded={() => void refresh()} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
