@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ComparisonBarChart } from '../components/ComparisonBarChart'
 import { ScriptDiffSection } from '../components/ScriptDiffSection'
+import { downloadTextFile, rowsToCsv, slugifyForFilename } from '../lib/csvExport'
 import { errorMessage, formatDate, formatMoney, formatPct } from '../lib/format'
 import { listReports } from '../lib/reportsApi'
 import type { Report } from '../types/report'
@@ -63,6 +64,24 @@ export function ComparePage() {
     return new Set(values).size > 1
   })
 
+  function handleExportCsv() {
+    const rows: string[][] = [['Metric', ...selected.map(reportLabel)]]
+    for (const row of metricRows) {
+      rows.push([row.label, ...selected.map((r) => row.get(r))])
+    }
+
+    if (differingKeys.length > 0) {
+      rows.push([]) // blank separator row between sections
+      rows.push(['Parameter', ...selected.map(reportLabel)])
+      for (const key of differingKeys) {
+        rows.push([key, ...selected.map((r) => (r.parameters ?? {})[key] ?? '')])
+      }
+    }
+
+    const filename = `compare_${selected.map((r) => slugifyForFilename(reportLabel(r))).join('_vs_')}.csv`
+    downloadTextFile(filename, rowsToCsv(rows))
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-semibold">Compare runs</h1>
@@ -97,6 +116,15 @@ export function ComparePage() {
         <p className="text-sm text-slate-400">Pick at least two reports to compare.</p>
       ) : (
         <>
+          <div className="flex justify-end">
+            <button
+              onClick={handleExportCsv}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
+              Export CSV
+            </button>
+          </div>
+
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
