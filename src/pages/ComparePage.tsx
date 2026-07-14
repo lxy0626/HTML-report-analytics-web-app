@@ -28,6 +28,7 @@ export function ComparePage() {
   const [reports, setReports] = useState<Report[] | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
 
   useEffect(() => {
     listReports()
@@ -76,6 +77,12 @@ export function ComparePage() {
       for (const key of differingKeys) {
         rows.push([key, ...selected.map((r) => (r.parameters ?? {})[key] ?? '')])
       }
+    }
+
+    if (aiSummary) {
+      rows.push([])
+      rows.push(['AI explanation of script changes'])
+      rows.push([aiSummary])
     }
 
     const filename = `compare_${selected.map((r) => slugifyForFilename(reportLabel(r))).join('_vs_')}.csv`
@@ -242,6 +249,7 @@ export function ComparePage() {
               key={`${selected[0].id}-${selected[1].id}`}
               before={selected[0]}
               after={selected[1]}
+              onSummaryChange={setAiSummary}
             />
           )}
         </>

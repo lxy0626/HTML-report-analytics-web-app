@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { requestDiffSummary, type DiffMetrics } from '../lib/aiSummary'
 import { errorMessage } from '../lib/format'
 import { diffToText } from '../lib/scriptDiff'
@@ -25,12 +25,20 @@ interface ScriptDiffSectionProps {
   /** Report id to persist the generated summary onto (the fixed prev/current relationship on the
    *  detail page). Omit for an arbitrary pair (e.g. Compare page) where nothing should be cached. */
   persistTo?: string
+  /** Notified with the current summary text (or null) whenever it changes — lets a parent like
+   *  the Compare page include the generated explanation in a CSV export. */
+  onSummaryChange?: (summary: string | null) => void
 }
 
-export function ScriptDiffSection({ before, after, persistTo }: ScriptDiffSectionProps) {
+export function ScriptDiffSection({ before, after, persistTo, onSummaryChange }: ScriptDiffSectionProps) {
   const [summary, setSummary] = useState<string | null>(after.ai_summary ?? null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    onSummaryChange?.(summary)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary])
 
   if (!before.script_source || !after.script_source) {
     return (
