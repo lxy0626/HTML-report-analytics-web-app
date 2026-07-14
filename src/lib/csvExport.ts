@@ -21,12 +21,3 @@ export function downloadTextFile(filename: string, content: string, mimeType = '
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
-
-/** Filesystem-safe filename fragment (spaces/punctuation collapsed to single dashes). */
-export function slugifyForFilename(text: string): string {
-  return text
-    .trim()
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase()
-}

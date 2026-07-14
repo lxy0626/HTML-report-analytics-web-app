@@ -23,6 +23,10 @@ export function ReportsTable({
   const [sortKey, setSortKey] = useState<SortKey>('uploaded_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
+  // Stable "run number" based on upload order, independent of the current sort — so "#3" always
+  // refers to the same report no matter how the table is currently sorted.
+  const indexOf = new Map(reports.map((r, i) => [r.id, i + 1]))
+
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -52,6 +56,7 @@ export function ReportsTable({
       <table className="w-full text-left text-sm">
         <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
           <tr>
+            <th className="px-4 py-2">#</th>
             <th className="px-4 py-2">EA / Tag</th>
             <th className="px-4 py-2">Symbol</th>
             {columns.map((c) => (
@@ -73,6 +78,7 @@ export function ReportsTable({
               key={r.id}
               className="border-b border-slate-100 last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
             >
+              <td className="px-4 py-2 text-slate-400">#{indexOf.get(r.id)}</td>
               <td className="px-4 py-2">
                 <Link
                   to={`/reports/${r.id}`}

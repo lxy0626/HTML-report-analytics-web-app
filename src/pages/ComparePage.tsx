@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ComparisonBarChart } from '../components/ComparisonBarChart'
 import { ScriptDiffSection } from '../components/ScriptDiffSection'
-import { downloadTextFile, rowsToCsv, slugifyForFilename } from '../lib/csvExport'
+import { downloadTextFile, rowsToCsv } from '../lib/csvExport'
 import { errorMessage, formatDate, formatMoney, formatPct } from '../lib/format'
 import { listReports } from '../lib/reportsApi'
 import type { Report } from '../types/report'
@@ -40,6 +40,10 @@ export function ComparePage() {
     () => (reports ?? []).filter((r) => selectedIds.includes(r.id)),
     [reports, selectedIds],
   )
+
+  // Stable "run number" based on upload order (listReports() returns ascending by uploaded_at),
+  // independent of any later sorting/filtering — so "#3" always refers to the same report.
+  const indexOf = useMemo(() => new Map((reports ?? []).map((r, i) => [r.id, i + 1])), [reports])
 
   function toggle(id: string) {
     setSelectedIds((ids) => (ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id]))
@@ -90,8 +94,7 @@ export function ComparePage() {
       rows.push([aiSummary])
     }
 
-    const filename = `compare_${selected.map((r) => slugifyForFilename(reportLabel(r))).join('_vs_')}.csv`
-    downloadTextFile(filename, rowsToCsv(rows))
+    downloadTextFile('comparisonresult.csv', rowsToCsv(rows))
   }
 
   return (
@@ -126,6 +129,7 @@ export function ComparePage() {
                   checked={selectedIds.includes(r.id)}
                   onChange={() => toggle(r.id)}
                 />
+                <span className="text-slate-400">#{indexOf.get(r.id)}</span>
                 <span className="font-medium">{reportLabel(r)}</span>
                 <span className="text-slate-400">· {formatDate(r.uploaded_at)}</span>
               </label>
