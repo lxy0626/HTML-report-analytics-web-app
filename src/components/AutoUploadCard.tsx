@@ -24,6 +24,7 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
   const lastMtimeRef = useRef<number | null>(getLastUploadedMtime())
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const processingRef = useRef(false)
 
   function stopWatching() {
     if (intervalRef.current) {
@@ -41,7 +42,7 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
 
   async function checkOnce() {
     const handle = report.handleRef.current
-    if (!handle) return
+    if (!handle || processingRef.current) return
     try {
       const file = await handle.getFile()
       setLastChecked(new Date())
@@ -51,8 +52,6 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
       if (!/<\/html>\s*$/i.test(html.trim())) return // still being written; try again next poll
 
       const parsed = parseReport(html)
-      lastMtimeRef.current = file.lastModified
-      setLastUploadedMtime(file.lastModified)
 
       let scriptSource: string | null = null
       if (script.handleRef.current) {
@@ -63,6 +62,10 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
         }
       }
 
+      // Only marked "handled" once the upload actually succeeds — otherwise a transient failure
+      // (network drop, a schema mismatch, etc.) would silently skip this report forever, since
+      // the file's mtime won't change again until the next real test run.
+      processingRef.current = true
       await saveReport({
         file,
         parsed,
@@ -70,6 +73,8 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
         notes: 'Auto-uploaded from browser watcher',
         scriptSource,
       })
+      lastMtimeRef.current = file.lastModified
+      setLastUploadedMtime(file.lastModified)
       setMessage(
         `Uploaded new report at ${new Date().toLocaleTimeString()} — net profit ${parsed.netProfit ?? '—'}, profit factor ${parsed.profitFactor ?? '—'}${scriptSource ? ' (with script snapshot)' : ''}`,
       )
@@ -77,6 +82,8 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
     } catch (err) {
       if (err instanceof ReportParseError) return // probably mid-write; try again next poll
       setMessage(`Error: ${errorMessage(err, 'Unexpected error while checking the file.')}`)
+    } finally {
+      processingRef.current = false
     }
   }
 
