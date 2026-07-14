@@ -94,6 +94,23 @@ Instead of manually uploading `StrategyTester.htm` after every backtest, the Das
 This uses the browser's **File System Access API**, which only Chromium-based browsers (Chrome,
 Edge) support — Firefox and Safari will see a message pointing to the regular Upload page instead.
 
+### If the file picker refuses your report ("contains system files")
+
+Chrome hard-blocks the File System Access API from ever accessing files under certain sensitive
+system directories — `AppData`, `Program Files`, `Windows`, etc. — as a browser security policy
+that no website (including this one) can bypass, and no OS setting fixes. MetaTrader's data folder
+(`AppData\Roaming\MetaQuotes\Terminal\...`, where `StrategyTester.htm` lives) falls inside that
+blocked zone.
+
+The fix: run [`mirror-report.ps1`](mirror-report.ps1) (double-click
+[`mirror-report.bat`](mirror-report.bat)), which mirrors the report out to
+`Documents\MT4Reports\StrategyTester.htm` — a location Chrome does allow — every time MetaTrader
+rewrites it. Point Auto-upload's file picker at that mirrored copy instead of the original. It's a
+credential-free, single-purpose script (it only ever copies one file; it never touches Supabase or
+your login) — leave it running alongside Auto-upload while you test, same "only active while
+testing" workflow. Edit the `$source` path at the top of the script if your terminal ID folder
+differs from the one it defaults to.
+
 ## Script-diff + AI summary (optional)
 
 Both upload paths (Upload page and Auto-upload) let you optionally attach the EA's `.mq4`/`.mq5`
