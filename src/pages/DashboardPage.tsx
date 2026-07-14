@@ -5,7 +5,7 @@ import { ReportsTable } from '../components/ReportsTable'
 import { RiskRewardScatter } from '../components/RiskRewardScatter'
 import { StatCard } from '../components/StatCard'
 import { TrendChart } from '../components/TrendChart'
-import { formatDate, formatMoney, formatPct } from '../lib/format'
+import { errorMessage, formatDate, formatMoney, formatPct } from '../lib/format'
 import { deleteReport, listReports } from '../lib/reportsApi'
 import type { Report } from '../types/report'
 
@@ -24,7 +24,7 @@ export function DashboardPage() {
     try {
       setReports(await listReports())
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reports.')
+      setError(errorMessage(err, 'Failed to load reports.'))
     }
   }
 

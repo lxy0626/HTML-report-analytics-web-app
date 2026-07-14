@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EquityCurveChart } from '../components/EquityCurveChart'
 import { ScriptDiffSection } from '../components/ScriptDiffSection'
 import { TradesTable } from '../components/TradesTable'
-import { formatDate, formatMoney, formatNumber, formatPct } from '../lib/format'
+import { errorMessage, formatDate, formatMoney, formatNumber, formatPct } from '../lib/format'
 import { deleteReport, getPreviousReport, getReport, getSignedReportUrl } from '../lib/reportsApi'
 import type { Report } from '../types/report'
 
@@ -65,7 +65,7 @@ export function ReportDetailPage() {
         if (!cancelled) setPreviousReport(previous)
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load report.')
+        if (!cancelled) setError(errorMessage(err, 'Failed to load report.'))
       })
 
     return () => {
@@ -78,7 +78,7 @@ export function ReportDetailPage() {
     try {
       setOriginalUrl(await getSignedReportUrl(report))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the original file.')
+      setError(errorMessage(err, 'Could not load the original file.'))
     }
   }
 

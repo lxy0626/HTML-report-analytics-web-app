@@ -7,6 +7,7 @@ import {
   pickScriptFile,
   setLastUploadedMtime,
 } from '../lib/fileWatcher'
+import { errorMessage } from '../lib/format'
 import { parseReport, ReportParseError } from '../lib/parseReport'
 import { saveReport } from '../lib/reportsApi'
 import { useFileHandle } from '../lib/useFileHandle'
@@ -75,7 +76,7 @@ export function AutoUploadCard({ onUploaded }: { onUploaded?: () => void }) {
       onUploaded?.()
     } catch (err) {
       if (err instanceof ReportParseError) return // probably mid-write; try again next poll
-      setMessage(err instanceof Error ? `Error: ${err.message}` : 'Unexpected error while checking the file.')
+      setMessage(`Error: ${errorMessage(err, 'Unexpected error while checking the file.')}`)
     }
   }
 

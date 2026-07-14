@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { requestDiffSummary, type DiffMetrics } from '../lib/aiSummary'
+import { errorMessage } from '../lib/format'
 import { diffToText } from '../lib/scriptDiff'
 import { saveAiSummary } from '../lib/reportsApi'
 import type { Report } from '../types/report'
@@ -61,7 +62,7 @@ export function ScriptDiffSection({ before, after, persistTo }: ScriptDiffSectio
       if (persistTo) await saveAiSummary(persistTo, result)
       setSummary(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate summary.')
+      setError(errorMessage(err, 'Failed to generate summary.'))
     } finally {
       setLoading(false)
     }

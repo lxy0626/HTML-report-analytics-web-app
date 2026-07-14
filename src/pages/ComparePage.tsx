@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ComparisonBarChart } from '../components/ComparisonBarChart'
 import { ScriptDiffSection } from '../components/ScriptDiffSection'
-import { formatDate, formatMoney, formatPct } from '../lib/format'
+import { errorMessage, formatDate, formatMoney, formatPct } from '../lib/format'
 import { listReports } from '../lib/reportsApi'
 import type { Report } from '../types/report'
 
@@ -31,7 +31,7 @@ export function ComparePage() {
   useEffect(() => {
     listReports()
       .then(setReports)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load reports.'))
+      .catch((err) => setError(errorMessage(err, 'Failed to load reports.')))
   }, [])
 
   const selected = useMemo(

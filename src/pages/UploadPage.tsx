@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { StatCard } from '../components/StatCard'
-import { formatMoney, formatPct } from '../lib/format'
+import { errorMessage, formatMoney, formatPct } from '../lib/format'
 import { parseReport, ReportParseError, validateReportFile } from '../lib/parseReport'
 import { saveReport } from '../lib/reportsApi'
 import type { ParsedReport } from '../types/report'
@@ -61,7 +61,7 @@ export function UploadPage() {
       })
       navigate(`/reports/${report.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save the report.')
+      setError(errorMessage(err, 'Failed to save the report.'))
       setSaving(false)
     }
   }
