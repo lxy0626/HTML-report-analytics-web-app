@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.2",
+    "@supabase/supabase-js": "^2.110.7",
     "diff": "^9.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
