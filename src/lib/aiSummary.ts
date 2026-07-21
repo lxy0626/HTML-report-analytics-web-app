@@ -1,13 +1,7 @@
+import type { DiffMetrics } from '../../supabase/functions/_shared/diffMetrics.ts'
 import { supabase } from './supabaseClient'
 
-export interface DiffMetrics {
-  netProfit: number | null
-  profitFactor: number | null
-  maxDrawdownPct: number | null
-  winRatePct: number | null
-  totalTrades: number | null
-  expectedPayoff: number | null
-}
+export type { DiffMetrics }
 
 export interface ExplainDiffInput {
   eaName: string | null

@@ -1,42 +1,50 @@
 // Supabase Edge Function: given a script diff and the before/after backtest metrics, asks an LLM
 // for a short plausible-explanation narrative. Requires a valid Supabase JWT (default verify_jwt
-// behavior — only signed-in users of this project can call it). The only secret this function
-// touches is NIM_API_KEY, set via `supabase secrets set`; it never touches the database, so it
-// needs no service_role key.
+// behavior — only signed-in users of this project can call it); that JWT check is the actual
+// access control. The only secret this function touches is NIM_API_KEY, set via
+// `supabase secrets set`; it never touches the database, so it needs no service_role key.
 //
 // Uses NVIDIA NIM's free API catalog (build.nvidia.com) — an OpenAI-compatible endpoint serving
 // open models (including Chinese-developed ones like Qwen/DeepSeek) at no cost under generous
 // rate limits. NVIDIA's catalog changes over time, so the model is a secret too (NIM_MODEL) —
 // override it with `supabase secrets set NIM_MODEL=...` without redeploying if the default below
 // is ever retired.
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
+import type { DiffMetrics } from '../_shared/diffMetrics.ts'
 
 const MAX_DIFF_CHARS = 8000
 const NIM_URL = 'https://integrate.api.nvidia.com/v1/chat/completions'
 const DEFAULT_MODEL = 'qwen/qwen2.5-7b-instruct'
 
-interface Metrics {
-  netProfit: number | null
-  profitFactor: number | null
-  maxDrawdownPct: number | null
-  winRatePct: number | null
-  totalTrades: number | null
-  expectedPayoff: number | null
+// CORS is defense-in-depth, not the access control (the JWT check above that job) — restricting
+// it to known origins just means a browser won't hand a stolen/misdirected response to a page
+// that has no business seeing it. Override/add to this via the ALLOWED_ORIGINS secret (comma
+// separated) without redeploying, e.g. if this app is ever deployed to a different URL.
+const DEFAULT_ALLOWED_ORIGINS = ['https://lxy0626.github.io', 'http://localhost:5173']
+
+function getAllowedOrigins(): string[] {
+  const fromEnv = Deno.env.get('ALLOWED_ORIGINS')
+  return fromEnv ? fromEnv.split(',').map((o) => o.trim()) : DEFAULT_ALLOWED_ORIGINS
+}
+
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('origin') ?? ''
+  const allowed = getAllowedOrigins().includes(origin) ? origin : DEFAULT_ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    Vary: 'Origin',
+  }
 }
 
 interface RequestBody {
   eaName: string | null
   diff: string
-  before: Metrics
-  after: Metrics
+  before: DiffMetrics
+  after: DiffMetrics
 }
 
-function formatMetrics(m: Metrics): string {
+function formatMetrics(m: DiffMetrics): string {
   return [
     `net profit: ${m.netProfit ?? 'n/a'}`,
     `profit factor: ${m.profitFactor ?? 'n/a'}`,
@@ -72,33 +80,22 @@ function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS })
+function jsonResponse(body: unknown, status: number, cors: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), { status, headers: { ...cors, 'content-type': 'application/json' } })
+}
 
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-    })
-  }
+Deno.serve(async (req: Request) => {
+  const cors = corsHeaders(req)
+  if (req.method === 'OPTIONS') return new Response(null, { headers: cors })
+  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405, cors)
 
   try {
     const apiKey = Deno.env.get('NIM_API_KEY')
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'Server missing NIM_API_KEY.' }), {
-        status: 500,
-        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-      })
-    }
+    if (!apiKey) return jsonResponse({ error: 'Server missing NIM_API_KEY.' }, 500, cors)
     const model = Deno.env.get('NIM_MODEL') || DEFAULT_MODEL
 
     const body = (await req.json()) as RequestBody
-    if (!body.diff) {
-      return new Response(JSON.stringify({ error: 'Missing diff in request body.' }), {
-        status: 400,
-        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-      })
-    }
+    if (!body.diff) return jsonResponse({ error: 'Missing diff in request body.' }, 400, cors)
 
     const nimRes = await fetch(NIM_URL, {
       method: 'POST',
@@ -115,24 +112,20 @@ Deno.serve(async (req: Request) => {
     })
 
     if (!nimRes.ok) {
-      const text = await nimRes.text()
-      return new Response(JSON.stringify({ error: `NVIDIA NIM API error: ${text}` }), {
-        status: 502,
-        headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-      })
+      // Deliberately not forwarding NVIDIA's raw response body to the client — avoids leaking
+      // upstream infra details, and Edge Function logs (Supabase dashboard) already capture it
+      // for debugging.
+      console.error('NVIDIA NIM API error:', nimRes.status, await nimRes.text())
+      return jsonResponse({ error: 'The AI provider request failed. Check the function logs.' }, 502, cors)
     }
 
     const data = await nimRes.json()
     const raw: string = data.choices?.[0]?.message?.content ?? ''
     const summary = stripThinking(raw)
 
-    return new Response(JSON.stringify({ summary }), {
-      headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-    })
+    return jsonResponse({ summary }, 200, cors)
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...CORS_HEADERS, 'content-type': 'application/json' },
-    })
+    console.error('explain-diff error:', err)
+    return jsonResponse({ error: 'Unexpected server error. Check the function logs.' }, 500, cors)
   }
 })

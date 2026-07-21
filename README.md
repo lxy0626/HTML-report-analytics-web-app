@@ -167,8 +167,16 @@ browser bundle:
 
 The Edge Function (`supabase/functions/explain-diff`) only ever receives a text diff and metric
 deltas, never full source in the clear beyond that diff, and requires a valid Supabase login
-session to call (default JWT verification) — it never touches your database directly and holds no
-credential beyond the NVIDIA NIM key.
+session to call (default JWT verification — this is the actual access control) — it never touches
+your database directly and holds no credential beyond the NVIDIA NIM key. Its CORS allowlist
+(defense-in-depth, not the access control) defaults to this app's GitHub Pages URL and
+`localhost:5173`; override it without redeploying if you ever deploy this elsewhere:
+```bash
+npx supabase secrets set ALLOWED_ORIGINS=https://your-domain,http://localhost:5173
+```
+The `DiffMetrics` type this function and the browser both use lives once, in
+[`supabase/functions/_shared/diffMetrics.ts`](supabase/functions/_shared/diffMetrics.ts), imported
+by both sides — not redeclared.
 
 ## Notes on the parser
 
